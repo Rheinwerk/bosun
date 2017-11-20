@@ -166,9 +166,11 @@ type AWS struct {
 }
 
 type AzureEA struct {
-	EANumber          uint32
-	APIKey            string
-	LogBillingDetails bool
+	EANumber           uint32
+	APIKey             string
+	LogBillingDetails  bool
+	LogResourceDetails bool
+	LogExtraTags       bool
 }
 
 type SNMP struct {

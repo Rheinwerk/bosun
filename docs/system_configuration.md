@@ -18,8 +18,6 @@ order: 3
 
 <p class="title h1">{{page.title}}</p>
 
-{% raw %}
-
 ## Changes Since 0.5.0
 Since 0.5.0, the config has been split into two different files.
 
@@ -113,6 +111,12 @@ by Bosun via the API or [Save UI](/usage#definition-rule-saving).
 Mandatory.
 
 Example: `RuleFilePath = "dev.sample.conf"`
+
+### MaxRenderedTemplateAge
+If set, this will allow bosun to delete rendered templates from its' data store.
+It will remove all rendered templates for alerts that have been closed for longer than this time (in days).
+
+Example: `MaxRenderedTemplateAge = 30 # retain old templates for only 30 days`
 
 ### TimeAndDate
 Used to configure time zones that will be linked to in Bosun's
