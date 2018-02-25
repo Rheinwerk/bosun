@@ -31,6 +31,7 @@ import (
 	"github.com/BurntSushi/toml"
 	"github.com/facebookgo/httpcontrol"
 	"crypto/tls"
+	"bosun.org/cmd/scollector/conftools"
 )
 
 var (
@@ -223,7 +224,7 @@ func main() {
 	if err != nil {
 		slog.Fatalf("Error adding tag overrides: %s", err)
 	}
-	u, err := parseHost(conf.Host)
+	u, err := conftools.ParseHost(conf.Host)
 	if *flagList {
 		list(c)
 		return
@@ -255,7 +256,7 @@ func main() {
 	}
 	cdp, cquit := collectors.Run(c)
 	if u != nil {
-		slog.Infoln("OpenTSDB host:", hideUrlCredentials(u))
+		slog.Infoln("OpenTSDB host:", conftools.HideUrlCredentials(u))
 	}
 	collect.UseNtlm = conf.UseNtlm
 	if err := collect.InitChan(u, "scollector", cdp); err != nil {
@@ -386,31 +387,6 @@ func list(cs []collectors.Collector) {
 	for _, c := range cs {
 		fmt.Println(c.Name())
 	}
-}
-
-func parseHost(host string) (*url.URL, error) {
-	if !strings.Contains(host, "//") {
-		host = "http://" + host
-	}
-	u, err := url.Parse(host)
-	if err != nil {
-		return nil, err
-	}
-	if u.Host == "" {
-		return nil, fmt.Errorf("no host specified")
-	}
-	return u, nil
-}
-
-func hideUrlCredentials(u *url.URL) *url.URL {
-	// Copy original url, replace credentials, e. g. for logging
-	if u.User != nil {
-		u2 := new(url.URL)
-		*u2 = *u
-		u2.User = url.UserPassword("xxx", "xxx")
-		return u2
-	}
-	return u
 }
 
 func printPut(c chan *opentsdb.DataPoint) {

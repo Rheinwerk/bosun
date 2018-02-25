@@ -113,7 +113,7 @@ func enableURLWithClient(client http.Client, url string, regexes ...string) func
 	return func() bool {
 		resp, err := client.Get(url)
 		if err != nil {
-			slog.Errorf("Could not connect successfully: %s", err)
+			// slog.Errorf("Could not connect successfully: %s", err)
 			return false
 		}
 		defer func() {
