@@ -109,6 +109,7 @@ func enableURL(url string, regexes ...string) func() bool {
 	return func() bool {
 		resp, err := http.Get(url)
 		if err != nil {
+			slog.Errorf("Could not connect successfully: %s", err)
 			return false
 		}
 		defer func() {
