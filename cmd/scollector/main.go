@@ -30,6 +30,7 @@ import (
 	"bosun.org/util"
 	"github.com/BurntSushi/toml"
 	"github.com/facebookgo/httpcontrol"
+	"crypto/tls"
 )
 
 var (
@@ -92,6 +93,7 @@ func main() {
 			ua,
 			&httpcontrol.Transport{
 				RequestTimeout: time.Minute,
+				TLSClientConfig: &tls.Config{InsecureSkipVerify:true},
 			},
 		},
 	}
