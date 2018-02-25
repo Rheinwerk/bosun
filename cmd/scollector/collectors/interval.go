@@ -102,12 +102,16 @@ func (c *IntervalCollector) Name() string {
 }
 
 func enableURL(url string, regexes ...string) func() bool {
+	return enableURLWithClient(*http.DefaultClient, url, regexes...)
+}
+
+func enableURLWithClient(client http.Client, url string, regexes ...string) func() bool {
 	res := make([]*regexp.Regexp, len(regexes))
 	for i, r := range regexes {
 		res[i] = regexp.MustCompile(r)
 	}
 	return func() bool {
-		resp, err := http.Get(url)
+		resp, err := client.Get(url)
 		if err != nil {
 			slog.Errorf("Could not connect successfully: %s", err)
 			return false
