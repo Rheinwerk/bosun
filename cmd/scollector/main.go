@@ -93,7 +93,7 @@ func main() {
 			ua,
 			&httpcontrol.Transport{
 				RequestTimeout: time.Minute,
-				TLSClientConfig: &tls.Config{InsecureSkipVerify:true},
+				TLSClientConfig: &tls.Config{InsecureSkipVerify:conf.DisableTLSValidation},
 			},
 		},
 	}
