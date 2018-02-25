@@ -30,7 +30,7 @@ func init() {
 				return c_elasticsearch(false)
 			},
 			name:   "elasticsearch",
-			Enable: enableURL("http://localhost:9200/"),
+			Enable: danielBool, /* enableURL("https://localhost:9200/"), DANIEL */
 		})
 		collectors = append(collectors, &IntervalCollector{
 			F: func() (opentsdb.MultiDataPoint, error) {
@@ -38,11 +38,13 @@ func init() {
 			},
 			name:     "elasticsearch-indices",
 			Interval: time.Minute * 15,
-			Enable:   enableURL("http://localhost:9200/"),
+			Enable:   danielBool , /* enableURL("https://localhost:9200/"), DANIEL*/
 		})
 	})
 }
-
+func danielBool() bool {
+	return true
+}
 var (
 	elasticPreV1     = regexp.MustCompile(`^0\.`)
 	elasticStatusMap = map[string]int{
@@ -238,13 +240,15 @@ func esSkipIndex(index string) bool {
 
 func esReq(path, query string, v interface{}) error {
 	u := &url.URL{
-		Scheme:   "http",
+		Scheme:   "https",
 		Host:     "localhost:9200",
+		User:     url.UserPassword("monitor", "monitor"),
 		Path:     path,
 		RawQuery: query,
 	}
 	resp, err := http.Get(u.String())
 	if err != nil {
+		slog.Errorf("Error querying Elasticsearch: %s", err)
 		return nil
 	}
 	defer resp.Body.Close()
