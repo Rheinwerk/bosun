@@ -68,6 +68,7 @@ type Conf struct {
 	// MetricPrefix prepended to all metrics path
 	MetricPrefix string
 
+	ElasticsearchURL  string
 	HAProxy        []HAProxy
 	SNMP           []SNMP
 	MIBS           map[string]MIB

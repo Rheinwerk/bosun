@@ -15,10 +15,21 @@ import (
 	"bosun.org/metadata"
 	"bosun.org/opentsdb"
 	"bosun.org/slog"
+	"fmt"
 )
 
 func init() {
 	registerInit(func(c *conf.Conf) {
+		esurl, err := parseHost(c.ElasticsearchURL)
+		if err != nil {
+			slog.Infoln("ElasticsearchURL not set or invalid. Using default.")
+			esurl = &url.URL {
+				Host: "localhost:9200",
+				Scheme: "http",
+			}
+		}
+		slog.Infof("ElasticsearchURL: %s", hideUrlCredentials(esurl))
+
 		for _, filter := range c.ElasticIndexFilters {
 			err := AddElasticIndexFilter(filter)
 			if err != nil {
@@ -30,7 +41,7 @@ func init() {
 				return c_elasticsearch(false)
 			},
 			name:   "elasticsearch",
-			Enable: danielBool, /* enableURL("https://localhost:9200/"), DANIEL */
+			Enable: enableURL(esurl.String()),
 		})
 		collectors = append(collectors, &IntervalCollector{
 			F: func() (opentsdb.MultiDataPoint, error) {
@@ -38,13 +49,38 @@ func init() {
 			},
 			name:     "elasticsearch-indices",
 			Interval: time.Minute * 15,
-			Enable:   danielBool , /* enableURL("https://localhost:9200/"), DANIEL*/
 		})
 	})
 }
+func parseHost(host string) (*url.URL, error) {
+	if !strings.Contains(host, "//") {
+		host = "http://" + host
+	}
+	u, err := url.Parse(host)
+	if err != nil {
+		return nil, err
+	}
+	if u.Host == "" {
+		return nil, fmt.Errorf("no host specified")
+	}
+	return u, nil
+}
+
+func hideUrlCredentials(u *url.URL) *url.URL {
+	// Copy original url, replace credentials, e. g. for logging
+	if u.User != nil {
+		u2 := new(url.URL)
+		*u2 = *u
+		u2.User = url.UserPassword("xxx", "xxx")
+		return u2
+	}
+	return u
+}
+
 func danielBool() bool {
 	return true
 }
+
 var (
 	elasticPreV1     = regexp.MustCompile(`^0\.`)
 	elasticStatusMap = map[string]int{
