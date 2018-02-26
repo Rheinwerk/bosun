@@ -27,6 +27,12 @@ func init() {
 	metadata.AddMetricMeta(
 		"bosun.email.sent_failed", metadata.Counter, metadata.PerSecond,
 		"The number of email notifications that Bosun failed to send.")
+	metadata.AddMetricMeta(
+		"bosun.post.sent", metadata.Counter, metadata.PerSecond,
+		"The number of post notifications sent by Bosun.")
+	metadata.AddMetricMeta(
+		"bosun.post.sent_failed", metadata.Counter, metadata.PerSecond,
+		"The number of post notifications that Bosun failed to send.")
 }
 
 type PreparedNotifications struct {
@@ -99,10 +105,12 @@ func (n *Notification) NotifyAlert(rt *models.RenderedTemplates, c SystemConfPro
 }
 
 type PreparedHttp struct {
-	URL     string
-	Method  string
-	Headers map[string]string `json:",omitempty"`
-	Body    string
+	URL        string
+	Method     string
+	Headers    map[string]string `json:",omitempty"`
+	Body       string
+	AK         string
+	NotifyName string
 }
 
 func (p *PreparedHttp) Send() (int, error) {
@@ -127,16 +135,20 @@ func (p *PreparedHttp) Send() (int, error) {
 		return 0, err
 	}
 	if resp.StatusCode >= 300 {
-		return resp.StatusCode, fmt.Errorf("bad response on notification %s: %d", p.Method, resp.StatusCode)
+		collect.Add("post.sent_failed", nil, 1)
+		return resp.StatusCode, fmt.Errorf("bad response on notification with name %s for alert %s method %s: %d", p.NotifyName, p.AK, p.Method, resp.StatusCode)
 	}
+	collect.Add("post.sent", nil, 1)
 	return resp.StatusCode, nil
 }
 
 func (n *Notification) PrepHttp(method string, url string, body string, ak string) *PreparedHttp {
 	prep := &PreparedHttp{
-		Method:  method,
-		URL:     url,
-		Headers: map[string]string{},
+		Method:     method,
+		URL:        url,
+		Headers:    map[string]string{},
+		AK:         ak,
+		NotifyName: n.Name,
 	}
 	if method == http.MethodPost {
 		prep.Body = body
