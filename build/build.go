@@ -20,6 +20,7 @@ var (
 	buildScollector = flag.Bool("scollector", false, "Only build scollector.")
 	output          = flag.String("output", "", "Output directory; defaults to $GOPATH/bin.")
 	esv5            = flag.Bool("esv5", false, "Build with esv5 support instead of v3")
+	targetos        = flag.String("targetos", "", "Specify OS to compile for. Passed to the compiler os GOOS. Defaults to current OS.")
 
 	allProgs = []string{"bosun", "scollector", "tsdbrelay"}
 )
@@ -53,7 +54,11 @@ func main() {
 		fmt.Println("building", app)
 		var args []string
 		if *output != "" {
-			args = append(args, "build", "-o", filepath.Join(*output, app))
+			suffix := ""
+			if *targetos != "" {
+				suffix = fmt.Sprintf("-%s", *targetos)
+			}
+			args = append(args, "build", "-o", fmt.Sprintf("%s%s", filepath.Join(*output, app), suffix))
 		} else {
 			args = append(args, "install")
 		}
@@ -65,6 +70,11 @@ func main() {
 		cmd := exec.Command("go", args...)
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
+		if *targetos != "" {
+			env:=os.Environ()
+			env = append(env, fmt.Sprintf("GOOS=%s", *targetos))
+			cmd.Env = env
+		}
 		err := cmd.Run()
 		if err != nil {
 			log.Fatal(err)

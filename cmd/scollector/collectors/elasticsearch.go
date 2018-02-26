@@ -15,10 +15,14 @@ import (
 	"bosun.org/metadata"
 	"bosun.org/opentsdb"
 	"bosun.org/slog"
+	"crypto/tls"
+	"bosun.org/cmd/scollector/conftools"
 )
 
 func init() {
 	registerInit(func(c *conf.Conf) {
+		esurl, esclient := elasticsearchHttpClient(c)
+
 		for _, filter := range c.ElasticIndexFilters {
 			err := AddElasticIndexFilter(filter)
 			if err != nil {
@@ -27,18 +31,18 @@ func init() {
 		}
 		collectors = append(collectors, &IntervalCollector{
 			F: func() (opentsdb.MultiDataPoint, error) {
-				return c_elasticsearch(false)
+				return c_elasticsearch(false, esurl, esclient)
 			},
 			name:   "elasticsearch",
-			Enable: enableURL("http://localhost:9200/"),
+			Enable: enableURLWithClient(*esclient, esurl.String()),
 		})
 		collectors = append(collectors, &IntervalCollector{
 			F: func() (opentsdb.MultiDataPoint, error) {
-				return c_elasticsearch(true)
+				return c_elasticsearch(true, esurl, esclient)
 			},
 			name:     "elasticsearch-indices",
 			Interval: time.Minute * 15,
-			Enable:   enableURL("http://localhost:9200/"),
+			Enable:   enableURLWithClient(*esclient, esurl.String()),
 		})
 	})
 }
@@ -158,25 +162,25 @@ func (s *structProcessor) add(prefix string, st interface{}, ts opentsdb.TagSet)
 	}
 }
 
-func c_elasticsearch(collectIndices bool) (opentsdb.MultiDataPoint, error) {
+func c_elasticsearch(collectIndices bool, esurl *url.URL, esclient *http.Client) (opentsdb.MultiDataPoint, error) {
 	var status ElasticStatus
-	if err := esReq("/", "", &status); err != nil {
+	if err := esReq(esurl, esclient, "/", "", &status); err != nil {
 		return nil, err
 	}
 	var clusterStats ElasticClusterStats
-	if err := esReq(esStatsURL(status.Version.Number), "", &clusterStats); err != nil {
+	if err := esReq(esurl, esclient, esStatsURL(status.Version.Number), "", &clusterStats); err != nil {
 		return nil, err
 	}
 	var clusterState ElasticClusterState
-	if err := esReq("/_cluster/state/master_node", "", &clusterState); err != nil {
+	if err := esReq(esurl, esclient, "/_cluster/state/master_node", "", &clusterState); err != nil {
 		return nil, err
 	}
 	var clusterHealth ElasticHealth
-	if err := esReq("/_cluster/health", "level=indices", &clusterHealth); err != nil {
+	if err := esReq(esurl, esclient, "/_cluster/health", "level=indices", &clusterHealth); err != nil {
 		return nil, err
 	}
 	var indexStats ElasticIndexStats
-	if err := esReq("/_stats", "", &indexStats); err != nil {
+	if err := esReq(esurl, esclient, "/_stats", "", &indexStats); err != nil {
 		return nil, err
 	}
 	var md opentsdb.MultiDataPoint
@@ -236,15 +240,30 @@ func esSkipIndex(index string) bool {
 	return false
 }
 
-func esReq(path, query string, v interface{}) error {
-	u := &url.URL{
-		Scheme:   "http",
-		Host:     "localhost:9200",
-		Path:     path,
-		RawQuery: query,
+func elasticsearchHttpClient(c *conf.Conf) (*url.URL, *http.Client) {
+	esurl, err := conftools.ParseHost(c.Elasticsearch.URL)
+	esclient := &http.Client{
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: c.Elasticsearch.DisableTLSValidation},
+		},
 	}
-	resp, err := http.Get(u.String())
 	if err != nil {
+		slog.Infoln("ElasticsearchURL not set or invalid. Using default.")
+		esurl = &url.URL{
+			Host:   "localhost:9200",
+			Scheme: "http",
+		}
+	}
+	slog.Infof("ElasticsearchURL: %s", conftools.HideUrlCredentials(esurl))
+	return esurl, esclient
+}
+
+func esReq(u *url.URL, client *http.Client, path, query string, v interface{}) error {
+	u.Path = path
+	u.RawQuery = query
+	resp, err := client.Get(u.String())
+	if err != nil {
+		slog.Errorf("Error querying Elasticsearch (%s): %s", conftools.HideUrlCredentials(u), err)
 		return nil
 	}
 	defer resp.Body.Close()

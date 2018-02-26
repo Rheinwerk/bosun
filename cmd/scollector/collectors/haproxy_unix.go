@@ -19,8 +19,11 @@ func init() {
 				ii := i
 				collectors = append(collectors, &IntervalCollector{
 					F: func() (opentsdb.MultiDataPoint, error) {
-
-						return haproxyFetch(h.User, h.Password, ii.Tier, ii.URL)
+						if ii.User != "" {
+							return haproxyFetch(ii.User, ii.Password, ii.Tier, ii.URL)
+						} else {
+							return haproxyFetch(h.User, h.Password, ii.Tier, ii.URL)
+						}
 					},
 					name: fmt.Sprintf("haproxy-%s-%s", ii.Tier, ii.URL),
 				})
@@ -71,18 +74,31 @@ func haproxyFetch(user, pwd, tier, url string) (opentsdb.MultiDataPoint, error) 
 	if len(records[1]) < 16 {
 		return nil, fmt.Errorf("expected more columns with data. got: %v", len(records[1]))
 	}
-
+	header := parseHeader(records[0])
 	for _, rec := range records[1:] {
-		hType := haproxyType[rec[32]]
-		pxname := rec[0]
-		svname := rec[1]
+		typePos, ok := header["type"]
+		if !ok {
+			return nil, fmt.Errorf("type not found in haproxy header")
+		}
+		pxnamePos, ok := header["pxname"]
+		if !ok {
+			return nil, fmt.Errorf("pxname not found in haproxy header")
+		}
+		svnamePos, ok := header["svname"]
+		if !ok {
+			return nil, fmt.Errorf("svname not found in haproxy header")
+		}
+		hType := haproxyType[rec[typePos]]
+		pxname := rec[pxnamePos]
+		svname := rec[svnamePos]
 		ts := opentsdb.TagSet{"pxname": pxname, "svname": svname, "tier": tier}
-		for i, field := range haproxyCSVMeta {
-			if i >= len(rec) {
-				break
+		for _, field := range haproxyCSVMeta {
+			fieldPos, ok := header[field.Name]
+			if !ok {
+				return nil, fmt.Errorf("%s not found in haproxy header", field.Name)
 			}
 			m := strings.Join([]string{metric, hType, field.Name}, ".")
-			value := rec[i]
+			value := rec[fieldPos]
 			if field.Ignore == true {
 				continue
 			} else if strings.HasPrefix(field.Name, "hrsp") {
@@ -109,6 +125,8 @@ func haproxyFetch(user, pwd, tier, url string) (opentsdb.MultiDataPoint, error) 
 				if value == "" {
 					continue
 				}
+				// A star is added if the check is in progress.
+				value = strings.Trim(value, "* ")
 				v, ok := haproxyCheckStatus[value]
 				if !ok {
 					return nil, fmt.Errorf("unknown check status %v", value)
@@ -124,6 +142,20 @@ func haproxyFetch(user, pwd, tier, url string) (opentsdb.MultiDataPoint, error) 
 		}
 	}
 	return md, nil
+}
+
+// Convert the first line of the CSV data into a map
+// of column name -> column position.
+func parseHeader(fields []string) map[string]int {
+	header := map[string]int{}
+	for i, name := range fields {
+		if i == 0 {
+			header[strings.TrimLeft(name, " #")] = i
+		} else {
+			header[name] = i
+		}
+	}
+	return header
 }
 
 // MetricMetaHAProxy is a super-structure which adds a friendly Name,

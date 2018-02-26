@@ -8,6 +8,8 @@ import (
 type Conf struct {
 	// Host is the OpenTSDB or Bosun host to send data.
 	Host string
+	// Enable / Disable TLS Certificate Validation globally
+	DisableTLSValidation bool
 	// FullHost enables full hostnames: doesn't truncate to first ".".
 	FullHost bool
 	// ColDir is the external collectors directory.
@@ -66,6 +68,7 @@ type Conf struct {
 	// MetricPrefix prepended to all metrics path
 	MetricPrefix string
 
+	Elasticsearch  Elasticsearch
 	HAProxy        []HAProxy
 	SNMP           []SNMP
 	MIBS           map[string]MIB
@@ -98,6 +101,11 @@ type Conf struct {
 	Fastly              []Fastly
 }
 
+type Elasticsearch struct {
+	URL                  string
+	DisableTLSValidation bool
+}
+
 type HAProxy struct {
 	User      string
 	Password  string
@@ -105,8 +113,10 @@ type HAProxy struct {
 }
 
 type HAProxyInstance struct {
-	Tier string
-	URL  string
+	User     string
+	Password string
+	Tier     string
+	URL      string
 }
 
 type Nexpose struct {
