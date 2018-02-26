@@ -22,16 +22,16 @@ import (
 	"bosun.org/_version"
 	"bosun.org/cmd/scollector/collectors"
 	"bosun.org/cmd/scollector/conf"
+	"bosun.org/cmd/scollector/conftools"
 	"bosun.org/collect"
 	"bosun.org/metadata"
 	"bosun.org/opentsdb"
 	"bosun.org/slog"
 	"bosun.org/snmp"
 	"bosun.org/util"
+	"crypto/tls"
 	"github.com/BurntSushi/toml"
 	"github.com/facebookgo/httpcontrol"
-	"crypto/tls"
-	"bosun.org/cmd/scollector/conftools"
 )
 
 var (
@@ -93,8 +93,8 @@ func main() {
 		Transport: &scollectorHTTPTransport{
 			ua,
 			&httpcontrol.Transport{
-				RequestTimeout: time.Minute,
-				TLSClientConfig: &tls.Config{InsecureSkipVerify:conf.DisableTLSValidation},
+				RequestTimeout:  time.Minute,
+				TLSClientConfig: &tls.Config{InsecureSkipVerify: conf.DisableTLSValidation},
 			},
 		},
 	}

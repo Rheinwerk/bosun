@@ -104,6 +104,7 @@ type Conf struct {
 type Elasticsearch struct {
 	URL                  string
 	DisableTLSValidation bool
+	Disable              bool
 }
 
 type HAProxy struct {
