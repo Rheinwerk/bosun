@@ -12,17 +12,21 @@ import (
 	"time"
 
 	"bosun.org/cmd/scollector/conf"
+	"bosun.org/cmd/scollector/conftools"
 	"bosun.org/metadata"
 	"bosun.org/opentsdb"
 	"bosun.org/slog"
 	"crypto/tls"
-	"bosun.org/cmd/scollector/conftools"
 )
 
 func init() {
 	registerInit(func(c *conf.Conf) {
-		esurl, esclient := elasticsearchHttpClient(c)
+		if c.Elasticsearch.Disable {
+			slog.Infoln("Elasticsearch Collector is disabled.")
+			return
+		}
 
+		esurl, esclient := elasticsearchHttpClient(c)
 		for _, filter := range c.ElasticIndexFilters {
 			err := AddElasticIndexFilter(filter)
 			if err != nil {
@@ -44,6 +48,7 @@ func init() {
 			Interval: time.Minute * 15,
 			Enable:   enableURLWithClient(*esclient, esurl.String()),
 		})
+
 	})
 }
 

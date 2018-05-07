@@ -1,9 +1,9 @@
 package conftools
 
 import (
-	"strings"
-	"net/url"
 	"fmt"
+	"net/url"
+	"strings"
 )
 
 func ParseHost(host string) (*url.URL, error) {

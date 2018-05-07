@@ -71,7 +71,7 @@ func main() {
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		if *targetos != "" {
-			env:=os.Environ()
+			env := os.Environ()
 			env = append(env, fmt.Sprintf("GOOS=%s", *targetos))
 			cmd.Env = env
 		}
