@@ -206,6 +206,7 @@ func Listen(httpAddr, httpsAddr, certFile, keyFile string, devMode bool, tsdbHos
 	var miniprofilerRoutes = http.StripPrefix(miniprofiler.PATH, http.HandlerFunc(miniprofiler.MiniProfilerHandler))
 	router.PathPrefix(miniprofiler.PATH).Handler(baseChain.Then(miniprofilerRoutes)).Name("miniprofiler")
 
+	router.PathPrefix("/api").HandlerFunc(http.NotFound)
 	//MUST BE LAST!
 	router.PathPrefix("/").Handler(baseChain.Then(auth.Wrap(JSON(Index), canViewDash))).Name("index")
 
@@ -312,10 +313,11 @@ func IndexTSDB(w http.ResponseWriter, r *http.Request) {
 }
 
 type appSetings struct {
-	SaveEnabled     bool
-	AnnotateEnabled bool
-	Quiet           bool
-	Version         opentsdb.Version
+	SaveEnabled       bool
+	AnnotateEnabled   bool
+	Quiet             bool
+	Version           opentsdb.Version
+	ExampleExpression string
 
 	AuthEnabled   bool
 	TokensEnabled bool
@@ -349,13 +351,14 @@ func Index(t miniprofiler.Timer, w http.ResponseWriter, r *http.Request) (interf
 	}
 	u := easyauth.GetUser(r)
 	as := &appSetings{
-		SaveEnabled:     schedule.SystemConf.SaveEnabled(),
-		AnnotateEnabled: schedule.SystemConf.AnnotateEnabled(),
-		Quiet:           schedule.GetQuiet(),
-		Version:         openTSDBVersion,
-		AuthEnabled:     authEnabled,
-		TokensEnabled:   tokensEnabled,
-		Roles:           roleDefs,
+		SaveEnabled:       schedule.SystemConf.SaveEnabled(),
+		AnnotateEnabled:   schedule.SystemConf.AnnotateEnabled(),
+		Quiet:             schedule.GetQuiet(),
+		Version:           openTSDBVersion,
+		AuthEnabled:       authEnabled,
+		TokensEnabled:     tokensEnabled,
+		Roles:             roleDefs,
+		ExampleExpression: schedule.SystemConf.GetExampleExpression(),
 	}
 	if u != nil {
 		as.Username = u.Username
@@ -494,7 +497,7 @@ func OpenTSDBVersion(t miniprofiler.Timer, w http.ResponseWriter, r *http.Reques
 	if schedule.SystemConf.GetTSDBContext() != nil {
 		return schedule.SystemConf.GetTSDBContext().Version(), nil
 	}
-	return opentsdb.Version{0, 0}, nil
+	return opentsdb.Version{Major: 0, Minor: 0}, nil
 }
 
 func AnnotateEnabled(t miniprofiler.Timer, w http.ResponseWriter, r *http.Request) (interface{}, error) {
@@ -617,6 +620,13 @@ type ExtStatus struct {
 	*models.RenderedTemplates
 }
 
+type ExtIncidentStatus struct {
+	ExtStatus
+	IsActive  bool
+	Silence   *models.Silence
+	SilenceId string
+}
+
 func IncidentEvents(t miniprofiler.Timer, w http.ResponseWriter, r *http.Request) (interface{}, error) {
 	id := r.FormValue("id")
 	if id == "" {
@@ -634,7 +644,15 @@ func IncidentEvents(t miniprofiler.Timer, w http.ResponseWriter, r *http.Request
 	if err != nil {
 		return nil, err
 	}
-	st := ExtStatus{IncidentState: state, RenderedTemplates: rt, Subject: state.Subject}
+	st := ExtIncidentStatus{
+		ExtStatus: ExtStatus{IncidentState: state, RenderedTemplates: rt, Subject: state.Subject},
+		IsActive:  state.IsActive(),
+	}
+	silence := schedule.GetSilence(t, state.AlertKey)
+	if silence != nil {
+		st.Silence = silence
+		st.SilenceId = silence.ID()
+	}
 	return st, nil
 }
 
