@@ -66,7 +66,7 @@ func (e *Elastic) GetAnnotations(start, end *time.Time, fieldFilters ...FieldFil
 	}
 
 	var aType annotate.Annotation
-	scroll := e.Scroll(e.index).Query(elastic.NewBoolQuery().Must(filters...)).Size(e.maxResults).Pretty(true)
+	scroll := e.Scroll(e.index).Query(elastic.NewBoolQuery().Must(filters...)).Size(e.maxResults)
 	for {
 		res, err := scroll.Do(context.Background())
 		if err == io.EOF {
