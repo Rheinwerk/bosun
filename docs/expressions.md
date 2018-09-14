@@ -593,6 +593,52 @@ Returns the length of the longest streak of values that evaluate to true (i.e. m
 
 Sum.
 
+# Aggregation Functions
+
+Aggregation functions take a seriesSet, and return a new seriesSet.
+
+## aggr(series seriesSet, groups string, aggregator string) seriesSet
+{: .exprFunc}
+
+Takes a seriesSet and combines it into a new seriesSet with the groups specified, using an aggregator to merge any series that share the matching group values. If the groups argument is an empty string, all series are combined into a single series, regardless of existing groups. 
+
+The available aggregator functions are: `"avg"` (average), `"min"` (minimum), `"max"` (maximum), `"sum"` and `"pN"` (percentile) where N is a floating point number between 0 and 1 inclusive. For example, `"p.25"` will be the 25th percentile, `"p.999"` will be the 99.9th percentile. `"p0"` and `"p1"` are min and max respectively (However, in these cases it is recommended to use `"min"` and `"max"` for the sake of clarity.
+
+The aggr function can be particularly useful for removing anomalies when comparing timeseries over periods using the over function. 
+
+Example:
+
+```
+$weeks = over("sum:1m-avg:os.cpu{region=*,color=*}", "24h", "1w", 3)
+$agg = aggr($weeks, "region,color", "p.50")
+```
+
+The above example uses `over` to load a 24 hour period over the past 3 weeks. We then use the aggr function to combine the three weeks into one, selecting the median (`p.50`) value of the 3 weeks at each timestamp. This results in a new seriesSet, grouped by region and color, that represents a "normal" 24 hour period with anomalies removed.
+
+An error will be returned if a group is specified to aggregate on that does not exist in the original seriesSet.
+
+The aggr function expects points in the original series to be aligned by timestamp. If points are not aligned, they are aggregated separately. For example, if we had a seriesSet,
+
+Group       | Timestamp | Value |
+----------- | --------- | ----- |
+{host=web01} | 1 | 1 |
+{host=web01} | 2 | 7 |
+{host=web01} | 1 | 4 |
+
+and applied the following aggregation:
+
+```
+aggr($series, "host", "max")
+```
+
+we would receive the following aggregated result:
+
+Group       | Timestamp | Value | Timestamp | Value |
+----------- | --------- | ----- | --------- | ----- |
+{host=web01} | 1 | 4 | 2 | 7 |
+
+aggr also does not attempt to deal with NaN values in a consistent manner. If all values for a specific timestamp are NaN, the result for that timestamp will be NaN. If a particular timestamp has a mix of NaN and non-NaN values, the result may or may not be NaN, depending on the aggregation function specified.
+
 # Group Functions
 
 Group functions modify the OpenTSDB groups.
@@ -615,7 +661,7 @@ Accepts a tag key to remove from the set. The function will error if removing th
 ## t(numberSet, group string) seriesSet
 {: .exprFunc}
 
-Transposes N series of length 1 to 1 series of length N. If the group parameter is not the empty string, the number of series returned is equal to the number of tagks passed. This is useful for performing scalar aggregation across multiple results from a query. For example, to get the total memory used on the web tier: `sum(t(avg(q("avg:os.mem.used{host=*-web*}", "5m", "")), ""))`.
+Transposes N series of length 1 to 1 series of length N. If the group parameter is not the empty string, the number of series returned is equal to the number of tagks passed. This is useful for performing scalar aggregation across multiple results from a query. For example, to get the total memory used on the web tier: `sum(t(avg(q("avg:os.mem.used{host=*-web*}", "5m", "")), ""))`. See [Understanding the Transpose Function](/t) for more explanation.
 
 How transpose works conceptually
 
