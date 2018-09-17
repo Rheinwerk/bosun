@@ -68,7 +68,6 @@ type Conf struct {
 	// MetricPrefix prepended to all metrics path
 	MetricPrefix string
 
-	Elasticsearch  Elasticsearch
 	HAProxy        []HAProxy
 	SNMP           []SNMP
 	MIBS           map[string]MIB
@@ -102,12 +101,6 @@ type Conf struct {
 	HbaseRegions           bool
 	Oracles                []Oracle
 	Fastly                 []Fastly
-}
-
-type Elasticsearch struct {
-	URL                  string
-	DisableTLSValidation bool
-	Disable              bool
 }
 
 type HAProxy struct {
