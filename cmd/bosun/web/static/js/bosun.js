@@ -110,6 +110,14 @@ var IncidentState = (function () {
         this.WorstStatus = is.WorstStatus;
         this.LastAbnormalStatus = is.LastAbnormalStatus;
         this.LastAbnormalTime = is.LastAbnormalTime;
+        this.PreviousIds = new Array();
+        if (is.PreviousIds) {
+            for (var _d = 0, _e = is.PreviousIds; _d < _e.length; _d++) {
+                var id = _e[_d];
+                this.PreviousIds.push(id);
+            }
+        }
+        this.NextId = is.NextId;
     }
     IncidentState.prototype.IsPendingClose = function () {
         for (var _i = 0, _a = this.Actions; _i < _a.length; _i++) {
@@ -1469,7 +1477,7 @@ bosunApp.directive('tsComputations', function () {
     };
 });
 function fmtDuration(v) {
-    var diff = moment.duration(v, 'milliseconds');
+    var diff = (moment.duration(v, 'milliseconds'));
     var f;
     if (Math.abs(v) < 60000) {
         return diff.format('ss[s]');
@@ -1488,7 +1496,7 @@ function fmtTime(v) {
     else {
         inn = 'in ';
     }
-    return m.format() + ' UTC (' + inn + fmtDuration(msdiff) + ago + ')';
+    return m.format() + ' UTC (' + inn + fmtDuration(Math.abs(msdiff)) + ago + ')';
 }
 function parseDuration(v) {
     var pattern = /(\d+)(d|y|n|h|m|s)(-ago)?/;
