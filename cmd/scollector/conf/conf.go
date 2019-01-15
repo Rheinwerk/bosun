@@ -8,6 +8,8 @@ import (
 type Conf struct {
 	// Host is the OpenTSDB or Bosun host to send data.
 	Host string
+	// Enable / Disable TLS Certificate Validation globally
+	DisableTLSValidation bool
 	// FullHost enables full hostnames: doesn't truncate to first ".".
 	FullHost bool
 	// ColDir is the external collectors directory.

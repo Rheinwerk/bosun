@@ -84,6 +84,9 @@ HTTP Basic Auth.
 
 	Host = "https://user:password@example.com/"
 
+DisableTLSValidation (boolean): allows disabling certificate validation for TLS
+connections. Useful or self-signed certificates or during development.
+
 FullHost (boolean): enables full hostnames: doesn't truncate to first ".".
 
 ColDir (string): is the external collectors directory.
