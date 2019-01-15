@@ -425,7 +425,8 @@ ConnectionString and Role, which are the same as using sqlplus.
 By default Elastic nodes are auto-detected on localhost:9200, but if you have a
 node running on another network interface, a non-standard port or even multiple
 nodes running on the same host you can use the Elastic configuration. Also lets
-you specify basic auth credentials and using TLS by setting the Scheme to https:
+you specify basic auth credentials and using TLS by setting the Scheme to https.
+Optionally, you can disable TLS validation:
 
 	[[Elastic]]
 	  Host = "192.168.1.1"
@@ -435,6 +436,7 @@ you specify basic auth credentials and using TLS by setting the Scheme to https:
 	  User = "user"
 	  Password = "pass"
 	  Scheme = "https"
+	  DisableTLSValidation = false
 
 	[[Elastic]]
 	  Host = "192.168.1.1"

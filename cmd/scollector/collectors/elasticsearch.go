@@ -1,6 +1,7 @@
 package collectors
 
 import (
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -56,6 +57,9 @@ func init() {
 			if instance.Disable {
 				slog.Infof("Elastic instance %v is disabled. Skipping.", instance.Name)
 				continue
+			}
+			if instance.DisableTLSValidation {
+				slog.Infof("Elastic instance %v has TLS validation disabled.", instance.Name)
 			}
 			var creds string
 			if instance.User != "" || instance.Password != "" {
@@ -332,7 +336,14 @@ func esReq(instance conf.Elastic, path, query string, v interface{}) error {
 		Path:     path,
 		RawQuery: query,
 	}
-	resp, err := http.Get(u.String())
+	client := &http.Client{
+ 		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{
+			    InsecureSkipVerify: instance.DisableTLSValidation,
+			},
+		},
+	}
+	resp, err := client.Get(u.String())
 	if err != nil {
 		slog.Errorf("Error querying Elasticsearch: %v", err)
 		return nil

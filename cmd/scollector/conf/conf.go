@@ -284,4 +284,5 @@ type Elastic struct {
 	Disable         bool   // default is false.
 	Name            string // default is host_port
 	Scheme          string // default is http
+	DisableTLSValidation bool  // default is false
 }
