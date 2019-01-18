@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"strconv"
 	"sync"
 	"time"
 
@@ -133,8 +134,15 @@ var floatType = reflect.TypeOf(float64(0))
 func getFloat(unk interface{}) (float64, error) {
 	v := reflect.ValueOf(unk)
 	v = reflect.Indirect(v)
-	if !v.Type().ConvertibleTo(floatType) {
-		return 0, fmt.Errorf("cannot convert %v to float64", v.Type())
+	if v.Kind() == reflect.String {
+		sv := v.String()
+		fv, err := strconv.ParseFloat(sv, 64)
+		if err != nil {
+		    return 0, fmt.Errorf("cannot convert string (%v) to float64", v)
+		}
+		return fv, nil
+	} else if !v.Type().ConvertibleTo(floatType) {
+		return 0, fmt.Errorf("cannot convert %v (%v) to float64", v.Type(), v)
 	}
 	fv := v.Convert(floatType)
 	return fv.Float(), nil
