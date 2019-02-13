@@ -250,7 +250,7 @@ func (s *structProcessor) add(prefix string, st interface{}, ts opentsdb.TagSet)
 }
 
 func c_elasticsearch(collectIndices bool, instance conf.Elastic, client *http.Client) (opentsdb.MultiDataPoint, error) {
-	slog.Infof("Updating ES stats for %v", instance)
+	slog.Infof("Updating ES stats for %v", instance.Name)
 	var status ElasticStatus
 	if err := esReq(instance, client, "/", "", &status); err != nil {
 		return nil, err
