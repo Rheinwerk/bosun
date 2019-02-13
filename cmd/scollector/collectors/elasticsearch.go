@@ -93,9 +93,17 @@ func init() {
 			} else {
 				name = fmt.Sprintf("elasticsearch-%v", instance.Name)
 			}
+			slog.Infof("Constructing Elasticsearch HTTP Client for %v", instance.Name)
+			client := &http.Client{
+				Transport: &http.Transport{
+					TLSClientConfig: &tls.Config{
+						InsecureSkipVerify: instance.DisableTLSValidation,
+					},
+				},
+			}
 			collectors = append(collectors, &IntervalCollector{
 				F: func() (opentsdb.MultiDataPoint, error) {
-					return c_elasticsearch(false, instance)
+					return c_elasticsearch(false, instance, client)
 				},
 				name:     name,
 				Interval: clusterInterval,
@@ -109,7 +117,7 @@ func init() {
 			}
 			collectors = append(collectors, &IntervalCollector{
 				F: func() (opentsdb.MultiDataPoint, error) {
-					return c_elasticsearch(true, instance)
+					return c_elasticsearch(true, instance, client)
 				},
 				name:     name,
 				Interval: indexInterval,
@@ -241,26 +249,26 @@ func (s *structProcessor) add(prefix string, st interface{}, ts opentsdb.TagSet)
 	}
 }
 
-func c_elasticsearch(collectIndices bool, instance conf.Elastic) (opentsdb.MultiDataPoint, error) {
+func c_elasticsearch(collectIndices bool, instance conf.Elastic, client *http.Client) (opentsdb.MultiDataPoint, error) {
 	slog.Infof("Updating ES stats for %v", instance)
 	var status ElasticStatus
-	if err := esReq(instance, "/", "", &status); err != nil {
+	if err := esReq(instance, client, "/", "", &status); err != nil {
 		return nil, err
 	}
 	var clusterStats ElasticClusterStats
-	if err := esReq(instance, esStatsURL(status.Version.Number), "", &clusterStats); err != nil {
+	if err := esReq(instance, client, esStatsURL(status.Version.Number), "", &clusterStats); err != nil {
 		return nil, err
 	}
 	var clusterState ElasticClusterState
-	if err := esReq(instance, "/_cluster/state/master_node", "", &clusterState); err != nil {
+	if err := esReq(instance, client, "/_cluster/state/master_node", "", &clusterState); err != nil {
 		return nil, err
 	}
 	var clusterHealth ElasticHealth
-	if err := esReq(instance, "/_cluster/health", "level=indices", &clusterHealth); err != nil {
+	if err := esReq(instance, client, "/_cluster/health", "level=indices", &clusterHealth); err != nil {
 		return nil, err
 	}
 	var indexStats ElasticIndexStats
-	if err := esReq(instance, "/_stats", "", &indexStats); err != nil {
+	if err := esReq(instance, client, "/_stats", "", &indexStats); err != nil {
 		return nil, err
 	}
 	var md opentsdb.MultiDataPoint
@@ -327,7 +335,7 @@ func esSkipIndex(index string) bool {
 	return len(elasticIndexFiltersInc) > 0
 }
 
-func esReq(instance conf.Elastic, path, query string, v interface{}) error {
+func esReq(instance conf.Elastic, client *http.Client, path, query string, v interface{}) error {
 	up := url.UserPassword(instance.User, instance.Password)
 	u := &url.URL{
 		Scheme:   instance.Scheme,
@@ -335,13 +343,6 @@ func esReq(instance conf.Elastic, path, query string, v interface{}) error {
 		Host:     fmt.Sprintf("%v:%v", instance.Host, instance.Port),
 		Path:     path,
 		RawQuery: query,
-	}
-	client := &http.Client{
- 		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{
-			    InsecureSkipVerify: instance.DisableTLSValidation,
-			},
-		},
 	}
 	resp, err := client.Get(u.String())
 	if err != nil {
