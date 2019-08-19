@@ -45,9 +45,15 @@ func NewSearch(data database.DataAccess, skipLast bool) *Search {
 	}
 	collect.Set("search.index_queue", opentsdb.TagSet{}, func() interface{} { return len(s.indexQueue) })
 	if !skipLast {
-		s.loadLast()
+        // CenterDevice [Daniel]: Disable the regular saving and reloading of of the whole "LastInfo" dictionary to Redis,
+        // because it inflates the startup time and memory usage of Bosun tremendously. Also, because it is an opaque
+        // blob, it cannot be cleaned up very well.
+        // However, the individual metrics and tags are still indexed to redis for regular operations.
+        // They in turn need to be cleaned up for autoscaled hosts etc. externally from time to time to
+        // keep the size of redis in check.
+		// s.loadLast()
 		go s.redisIndex(s.indexQueue)
-		go s.backupLoop()
+        // go s.backupLoop()
 	}
 	return &s
 }
