@@ -544,6 +544,11 @@ func (s *Schedule) ActionByAlertKey(user, message string, t models.ActionType, a
 		return err
 	}
 	if st == nil {
+		if t == models.ActionForget {
+			// If there is no state, and we should forget it anyway, it might just already be forgotten
+			// no need to log an error
+			return nil
+		}
 		return fmt.Errorf("no such alert key: %v", ak)
 	}
 	_, err = s.action(user, message, t, at, st)
