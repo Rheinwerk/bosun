@@ -379,6 +379,7 @@ func Index(t miniprofiler.Timer, w http.ResponseWriter, r *http.Request) (interf
 }
 
 func serveError(w http.ResponseWriter, err error) {
+	slog.Error(err)
 	http.Error(w, err.Error(), http.StatusInternalServerError)
 }
 
