@@ -50,8 +50,9 @@ var netFields = []struct {
 	{"carrier.errs", metadata.Counter, metadata.Count},
 	{"compressed", metadata.Counter, metadata.Count},
 }
-
-var ifstatRE = regexp.MustCompile(`\s*(eth\d+|em\d+_\d+/\d+|em\d+_\d+|em\d+|` +
+// Make sure the regex is anchored to the beginning of the line, because
+// otherwise you might match substrings like eth in interface names like veth
+var ifstatRE = regexp.MustCompile(`^\s*(eth\d+|em\d+_\d+/\d+|em\d+_\d+|em\d+|` +
 	`bond\d+|team\d+|` +
 	`p\d+p\d+_\d+/\d+|p\d+p\d+_\d+|p\d+p\d+|` +
 	`en[[:alnum:]]+|wl[[:alnum:]]+|ww[[:alnum:]]+` + // Systemd predictable interface names

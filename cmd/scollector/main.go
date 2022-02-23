@@ -28,6 +28,7 @@ import (
 	"bosun.org/slog"
 	"bosun.org/snmp"
 	"bosun.org/util"
+	"crypto/tls"
 	"github.com/BurntSushi/toml"
 	"github.com/facebookgo/httpcontrol"
 )
@@ -92,6 +93,7 @@ func main() {
 			ua,
 			&httpcontrol.Transport{
 				RequestTimeout: time.Minute,
+				TLSClientConfig: &tls.Config{InsecureSkipVerify:conf.DisableTLSValidation},
 			},
 		},
 	}

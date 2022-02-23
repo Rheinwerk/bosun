@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"strconv"
 	"sync"
 	"time"
 
@@ -58,9 +59,15 @@ func NewSearch(data database.DataAccess, skipLast bool) *Search {
 		return len(s.last)
 	})
 	if !skipLast {
-		s.loadLast()
+        // CenterDevice [Daniel]: Disable the regular saving and reloading of of the whole "LastInfo" dictionary to Redis,
+        // because it inflates the startup time and memory usage of Bosun tremendously. Also, because it is an opaque
+        // blob, it cannot be cleaned up very well.
+        // However, the individual metrics and tags are still indexed to redis for regular operations.
+        // They in turn need to be cleaned up for autoscaled hosts etc. externally from time to time to
+        // keep the size of redis in check.
+		// s.loadLast()
 		go s.redisIndex(s.indexQueue)
-		go s.backupLoop()
+        // go s.backupLoop()
 	}
 	return &s
 }
@@ -147,8 +154,15 @@ var floatType = reflect.TypeOf(float64(0))
 func getFloat(unk interface{}) (float64, error) {
 	v := reflect.ValueOf(unk)
 	v = reflect.Indirect(v)
-	if !v.Type().ConvertibleTo(floatType) {
-		return 0, fmt.Errorf("cannot convert %v to float64", v.Type())
+	if v.Kind() == reflect.String {
+		sv := v.String()
+		fv, err := strconv.ParseFloat(sv, 64)
+		if err != nil {
+		    return 0, fmt.Errorf("cannot convert string (%v) to float64", v)
+		}
+		return fv, nil
+	} else if !v.Type().ConvertibleTo(floatType) {
+		return 0, fmt.Errorf("cannot convert %v (%v) to float64", v.Type(), v)
 	}
 	fv := v.Convert(floatType)
 	return fv.Float(), nil
