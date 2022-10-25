@@ -643,9 +643,9 @@ func (s *Schedule) action(user, message string, t models.ActionType, at *time.Ti
 		if !isUnknown {
 			return "", fmt.Errorf("can only forget unknowns")
 		}
-		// Do not forget Incidents that were acknowledged
-		if !st.NeedAck {
-			return "", fmt.Errorf("can only forget unacked")
+		slog.Infof("[[alert-key=%s,status=%s,alert=%s,actions=%i]]", st.AlertKey, st.CurrentStatus, st.Alert, len(st.Actions))
+		if len(st.Actions) != 0 {
+			return "", fmt.Errorf("will not forget alerts that were interacted with")
 		}
 		if err := s.DataAccess.Notifications().ClearNotifications(st.AlertKey); err != nil {
 			return "", err
