@@ -4,7 +4,6 @@ package opentsdb // import "bosun.org/opentsdb"
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -17,10 +16,9 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	"unicode"
-	"unicode/utf8"
 
 	"bosun.org/slog"
+	"github.com/pkg/errors"
 )
 
 // ResponseSet is a Multi-Set Response:
@@ -321,40 +319,21 @@ func Clean(s string) (string, error) {
 // tag values and replaces them.
 // See: http://opentsdb.net/docs/build/html/user_guide/writing.html#metrics-and-tags
 func Replace(s, replacement string) (string, error) {
-	if !needsReplacement(s) {
-		return s, nil
-	}
-	var c string
-	replaced := false
-	for len(s) > 0 {
-		r, size := utf8.DecodeRuneInString(s)
-		if isRuneValid(r) {
-			c += string(r)
-			replaced = false
-		} else if !replaced {
-			//only replace the first occurence of an invalid character.
-			c += replacement
-			replaced = true
-		}
-		s = s[size:]
-	}
-	if len(c) == 0 {
-		return "", fmt.Errorf("clean result is empty")
-	}
-	return c, nil
-}
 
-func needsReplacement(s string) bool {
-	for _, r := range []rune(s) {
-		if !isRuneValid(r) {
-			return true
-		}
+	// constructing a name processor isn't too expensive but we need to refactor this file so that it's possible to
+	// inject instances so that we don't have to keep newing up.
+	// For the moment I prefer to constructing like this to holding onto a global instance
+	val, err := NewOpenTsdbNameProcessor(replacement)
+	if err != nil {
+		return "", errors.Wrap(err, "Failed to create name processor")
 	}
-	return false
-}
 
-func isRuneValid(r rune) bool {
-	return unicode.IsLetter(r) || unicode.IsDigit(r) || r == '-' || r == '_' || r == '.' || r == '/'
+	result, err := val.FormatName(s)
+	if err != nil {
+		return "", errors.Wrap(err, "Failed to format string")
+	}
+
+	return result, nil
 }
 
 // MustReplace is like Replace, but returns an empty string on error.
@@ -454,6 +433,7 @@ type RateOptions struct {
 	Counter    bool  `json:"counter,omitempty"`
 	CounterMax int64 `json:"counterMax,omitempty"`
 	ResetValue int64 `json:"resetValue,omitempty"`
+	DropResets bool  `json:"dropResets,omitempty"`
 }
 
 // ParseRequest parses OpenTSDB requests of the form: start=1h-ago&m=avg:cpu.
@@ -516,7 +496,8 @@ func ParseQuery(query string, version Version) (q *Query, err error) {
 			return
 		}
 		sp := strings.Split(s[1:len(s)-1], ",")
-		q.RateOptions.Counter = sp[0] == "counter"
+		q.RateOptions.Counter = sp[0] == "counter" || sp[0] == "dropcounter"
+		q.RateOptions.DropResets = sp[0] == "dropcounter"
 		if len(sp) > 1 {
 			if sp[1] != "" {
 				if q.RateOptions.CounterMax, err = strconv.ParseInt(sp[1], 10, 64); err != nil {
@@ -645,15 +626,16 @@ func ParseTags(t string) (TagSet, error) {
 
 // ValidTSDBString returns true if s is a valid metric or tag.
 func ValidTSDBString(s string) bool {
-	if s == "" {
+
+	// constructing a name processor isn't too expensive but we need to refactor this file so that it's possible to
+	// inject instances so that we don't have to keep newing up.
+	// For the moment I prefer to constructing like this to holding onto a global instance
+	val, err := NewOpenTsdbNameProcessor("")
+	if err != nil {
 		return false
 	}
-	for _, c := range s {
-		if !isRuneValid(c) {
-			return false
-		}
-	}
-	return true
+
+	return val.IsValid(s)
 }
 
 var groupRE = regexp.MustCompile("{[^}]+}")
@@ -684,7 +666,12 @@ func (q Query) String() string {
 	if q.Rate {
 		s += "rate"
 		if q.RateOptions.Counter {
-			s += "{counter"
+			s += "{"
+			if q.RateOptions.DropResets {
+				s += "dropcounter"
+			} else {
+				s += "counter"
+			}
 			if q.RateOptions.CounterMax != 0 {
 				s += ","
 				s += strconv.FormatInt(q.RateOptions.CounterMax, 10)
@@ -920,11 +907,22 @@ var DefaultClient = &http.Client{
 // QueryResponse performs a v2 OpenTSDB request to the given host. host should
 // be of the form hostname:port. A nil client uses DefaultClient.
 func (r *Request) QueryResponse(host string, client *http.Client) (*http.Response, error) {
+
 	u := url.URL{
 		Scheme: "http",
 		Host:   host,
 		Path:   "/api/query",
 	}
+
+	pu, err := url.Parse(host)
+	if err == nil && pu.Scheme != "" && pu.Host != "" {
+		u.Scheme = pu.Scheme
+		u.Host = pu.Host
+		if pu.Path != "" {
+			u.Path = pu.Path
+		}
+	}
+
 	b, err := json.Marshal(&r)
 	if err != nil {
 		return nil, err

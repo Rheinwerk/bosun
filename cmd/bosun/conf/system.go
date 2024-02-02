@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"bosun.org/cloudwatch"
 	"bosun.org/slog"
 
 	"bosun.org/cmd/bosun/expr"
@@ -16,13 +17,15 @@ import (
 	"bosun.org/opentsdb"
 	ainsightsmgmt "github.com/Azure/azure-sdk-for-go/services/appinsights/mgmt/2015-05-01/insights"
 	ainsights "github.com/Azure/azure-sdk-for-go/services/appinsights/v1/insights"
+	"github.com/influxdata/influxdb/client/v2"
+	promapi "github.com/prometheus/client_golang/api"
+	promv1 "github.com/prometheus/client_golang/api/prometheus/v1"
 
 	"github.com/Azure/azure-sdk-for-go/services/preview/monitor/mgmt/2018-03-01/insights"
 	"github.com/Azure/azure-sdk-for-go/services/resources/mgmt/2018-02-01/resources"
 	"github.com/Azure/go-autorest/autorest"
 	"github.com/Azure/go-autorest/autorest/azure/auth"
 	"github.com/BurntSushi/toml"
-	"github.com/influxdata/influxdb/client/v2"
 )
 
 // SystemConf contains all the information that bosun needs to run. Outside of the conf package
@@ -61,8 +64,9 @@ type SystemConf struct {
 	InfluxConf       InfluxConf
 	ElasticConf      map[string]ElasticConf
 	AzureMonitorConf map[string]AzureMonitorConf
-
-	AnnotateConf AnnotateConf
+	PromConf         map[string]PromConf
+	CloudWatchConf   CloudWatchConf
+	AnnotateConf     AnnotateConf
 
 	AuthConf *AuthConf
 
@@ -84,9 +88,10 @@ type EnabledBackends struct {
 	Graphite     bool
 	Influx       bool
 	Elastic      bool
-	Logstash     bool
 	Annotate     bool
 	AzureMonitor bool
+	CloudWatch   bool
+	Prom         bool
 }
 
 // EnabledBackends returns and EnabledBackends struct which contains fields
@@ -96,9 +101,11 @@ func (sc *SystemConf) EnabledBackends() EnabledBackends {
 	b.OpenTSDB = sc.OpenTSDBConf.Host != ""
 	b.Graphite = sc.GraphiteConf.Host != ""
 	b.Influx = sc.InfluxConf.URL != ""
+	b.Prom = sc.PromConf["default"].URL != ""
 	b.Elastic = len(sc.ElasticConf["default"].Hosts) != 0
 	b.Annotate = len(sc.AnnotateConf.Hosts) != 0
 	b.AzureMonitor = len(sc.AzureMonitorConf) != 0
+	b.CloudWatch = sc.CloudWatchConf.Enabled
 	return b
 }
 
@@ -205,12 +212,33 @@ type InfluxConf struct {
 	Precision string
 }
 
+// PromConf contains configuration for a Prometheus TSDB that Bosun can query
+type PromConf struct {
+	URL string
+}
+
+// Valid returns if the configuration for the PromConf has required fields needed
+// to create a prometheus tsdb client
+func (pc PromConf) Valid() error {
+	if pc.URL == "" {
+		return fmt.Errorf("missing URL field")
+	}
+	// NewClient makes sure the url is valid, no connections are made in this call
+	_, err := promapi.NewClient(promapi.Config{Address: pc.URL})
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 // DBConf stores the connection information for Bosun's internal storage
 type DBConf struct {
 	RedisHost          string
 	RedisDb            int
 	RedisPassword      string
 	RedisClientSetName bool
+	RedisSentinels     []string
+	RedisMasterName    string
 
 	LedisDir      string
 	LedisBindAddr string
@@ -262,6 +290,25 @@ type LDAPGroup struct {
 	Path string
 	// Access to grant members of group Ex: "Admin"
 	Role string
+}
+
+type CloudWatchConf struct {
+	Enabled        bool
+	ExpansionLimit int
+	PagesLimit     int
+	Concurrency    int
+}
+
+func (c CloudWatchConf) Valid() error {
+	// Check Cloudwatch Configuration
+	if c.PagesLimit < 1 {
+		return fmt.Errorf(`error in cloudwatch configuration. PagesLimit must be greater than 0`)
+	}
+
+	if c.ExpansionLimit < 1 {
+		return fmt.Errorf(`error in cloudwatch configuration. ExpansionLimit must be greater than 0`)
+	}
+	return nil
 }
 
 // GetSystemConfProvider returns the SystemConfProvider interface
@@ -352,6 +399,13 @@ func loadSystemConfig(conf string, isFileName bool) (*SystemConf, error) {
 		}
 	}
 
+	// Check Prometheus Monitor Configurations
+	for prefix, conf := range sc.PromConf {
+		if err := conf.Valid(); err != nil {
+			return sc, fmt.Errorf(`error in configuration for Prometheus client "%v": %v`, prefix, err)
+		}
+	}
+
 	sc.md = decodeMeta
 	// clear default http listen if not explicitly specified
 	if !decodeMeta.IsDefined("HTTPListen") && decodeMeta.IsDefined("HTTPSListen") {
@@ -424,8 +478,20 @@ func (sc *SystemConf) GetLedisBindAddr() string {
 
 // GetRedisHost returns the host to use for Redis. If this is set than Redis
 // will be used instead of Ledis.
-func (sc *SystemConf) GetRedisHost() string {
-	return sc.DBConf.RedisHost
+func (sc *SystemConf) GetRedisHost() []string {
+	if sc.GetRedisMasterName() != "" {
+		return sc.DBConf.RedisSentinels
+	}
+	if sc.DBConf.RedisHost != "" {
+		return []string{sc.DBConf.RedisHost}
+	}
+	return []string{}
+}
+
+// GetRedisMasterName returns master name of redis instance within sentinel.
+// If this is return none empty string redis sentinel will be used
+func (sc *SystemConf) GetRedisMasterName() string {
+	return sc.DBConf.RedisMasterName
 }
 
 // GetRedisDb returns the redis database number to use
@@ -612,6 +678,23 @@ func (sc *SystemConf) GetInfluxContext() client.HTTPConfig {
 		c.InsecureSkipVerify = sc.InfluxConf.UnsafeSSL
 	}
 	return c
+}
+
+func (sc *SystemConf) GetCloudWatchContext() cloudwatch.Context {
+	c := cloudwatch.GetContext()
+	return c
+}
+
+// GetPromContext initializes returns a collection of Prometheus API v1 client APIs (connections)
+// from the configuration
+func (sc *SystemConf) GetPromContext() expr.PromClients {
+	clients := make(expr.PromClients)
+	for prefix, conf := range sc.PromConf {
+		// Error is checked in validation (PromConf Valid())
+		client, _ := promapi.NewClient(promapi.Config{Address: conf.URL})
+		clients[prefix] = promv1.NewAPI(client)
+	}
+	return clients
 }
 
 // GetElasticContext returns an Elastic context which contains all the information
