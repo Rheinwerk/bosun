@@ -347,6 +347,12 @@ var builtins = map[string]parse.Func{
 		Tags:          tagFirst,
 		F:             Limit,
 	},
+	"isnan": {
+		Args:   []models.FuncType{models.TypeNumberSet},
+		F:      IsNaN,
+		Return: models.TypeNumberSet,
+		Tags:   tagFirst,
+	},
 	"nv": {
 		Args:   []models.FuncType{models.TypeNumberSet, models.TypeScalar},
 		Return: models.TypeNumberSet,
@@ -718,6 +724,17 @@ func Epoch(e *State) (*Results, error) {
 			{Value: Scalar(float64(e.now.Unix()))},
 		},
 	}, nil
+}
+
+func IsNaN(e *State, nSet *Results) (*Results, error) {
+	for _, res := range nSet.Results {
+		if math.IsNaN(float64(res.Value.Value().(Number))) {
+			res.Value = Number(1)
+			continue
+		}
+		res.Value = Number(0)
+	}
+	return nSet, nil
 }
 
 func Month(e *State, offset float64, startEnd string) (*Results, error) {
@@ -1117,6 +1134,9 @@ func TimeDelta(e *State, series *Results) (*Results, error) {
 	for _, res := range series.Results {
 		sorted := NewSortedSeries(res.Value.Value().(Series))
 		newSeries := make(Series)
+		if len(sorted) == 0 {
+			continue
+		}
 		if len(sorted) < 2 {
 			newSeries[sorted[0].T] = 0
 			res.Value = newSeries
@@ -1476,4 +1496,22 @@ func Transpose(e *State, d *Results, gp string) (*Results, error) {
 		r.Results = append(r.Results, res)
 	}
 	return &r, nil
+}
+
+// parseDurationPair is a helper to parse Bosun/OpenTSDB style duration strings that are often
+// the last two arguments of tsdb query functions. It uses the State object's now property
+// and returns absolute start and end times
+func parseDurationPair(e *State, startDuration, endDuration string) (start, end time.Time, err error) {
+	sd, err := opentsdb.ParseDuration(startDuration)
+	if err != nil {
+		return
+	}
+	var ed opentsdb.Duration
+	if endDuration != "" {
+		ed, err = opentsdb.ParseDuration(endDuration)
+		if err != nil {
+			return
+		}
+	}
+	return e.now.Add(time.Duration(-sd)), e.now.Add(time.Duration(-ed)), nil
 }
