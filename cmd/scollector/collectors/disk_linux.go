@@ -3,6 +3,7 @@ package collectors
 import (
 	"fmt"
 	"io/ioutil"
+	"math"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -94,6 +95,13 @@ func isPseudoFS(name string) (res bool) {
 func c_iostat_linux() (opentsdb.MultiDataPoint, error) {
 	var md opentsdb.MultiDataPoint
 	var removables []string
+	// The format of /proc/diskstats has changed in newer Linux kernel versions, but existing fields remain unchanged.
+	// New fields were always appended to the end to maintain backward compatibility:
+	// - Until kernel 4.18: 14 fields (basic I/O statistics).
+	// - Kernel 4.18: Added 4 fields for "Discard" operations (total: 18 fields).
+	// - Kernel 5.5: Added 2 fields for "Flush" operations (total: 20 fields).
+	// - Future kernels may add more fields, always at the end.
+	// When parsing, read only the required fields and ignore any additional ones to ensure compatibility.
 	err := readLine("/proc/diskstats", func(s string) error {
 		values := strings.Fields(s)
 		if len(values) < 4 {
@@ -122,9 +130,9 @@ func c_iostat_linux() (opentsdb.MultiDataPoint, error) {
 				metric += "rem."
 			}
 		}
-		if len(values) == 14 {
+		if len(values) >= 14 {
 			var read_sectors, msec_read, write_sectors, msec_write float64
-			for i, v := range values[3:] {
+			for i, v := range values[3:int(math.Min(float64(len(values)), 13))] {
 				switch diskLinuxFields[i].key {
 				case "read_sectors":
 					read_sectors, _ = strconv.ParseFloat(v, 64)
