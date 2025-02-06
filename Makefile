@@ -164,6 +164,10 @@ bosun-windows:
 	CGO_ENABLED=0 GOOS=windows GOARCH=amd64 $(GOBUILD) -o $(BINARY_WIN) -v $(BOSUN_PACKAGE)
 scollector:
 	$(GOBUILD) -o $(SCOLLECTOR_BINARY) -v $(SCOLLECTOR_PACKAGE)
+scollector-linux-arm64:
+	GOOS=linux GOARCH=arm64 $(GOBUILD) -o $(SCOLLECTOR_BINARY) -v $(SCOLLECTOR_PACKAGE)
+scollector-linux-amd64:
+	GOOS=linux GOARCH=amd64 $(GOBUILD) -o $(SCOLLECTOR_BINARY) -v $(SCOLLECTOR_PACKAGE)
 tsdbrelay:
 	$(GOBUILD) -o $(TSDBRELAY_BINARY) -v $(TSDBRELAY_PACKAGE)
 
