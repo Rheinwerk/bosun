@@ -99,8 +99,17 @@ func linuxProcMonitor(w *WatchedProc, md *opentsdb.MultiDataPoint) error {
 			w.Remove(proc)
 			continue
 		}
-		stats := strings.Fields(string(stats_file))
-		if len(stats) < 24 {
+		// extract process name in parentheses by regex
+		re := regexp.MustCompile(`\((.*)\)`)
+		matches := re.FindStringSubmatch(string(stats_file))
+		if len(matches) < 2 {
+			return fmt.Errorf("process name not found")
+		}
+		// take the string after the closing parenthesis
+		afterProcessName := strings.TrimSpace(strings.SplitN(string(stats_file), ") ", 2)[1])
+
+		stats := strings.Fields(string(afterProcessName))
+		if len(stats) < 22 {
 			err = fmt.Errorf("stats too short")
 			continue
 		}
@@ -126,25 +135,25 @@ func linuxProcMonitor(w *WatchedProc, md *opentsdb.MultiDataPoint) error {
 			}
 		}
 		start_ts := file_status.ModTime().Unix()
-		user, err := strconv.ParseInt(stats[13], 10, 64)
+		user, err := strconv.ParseInt(stats[11], 10, 64)
 		if err != nil {
 			return fmt.Errorf("failed to convert process user cpu: %v", err)
 		}
-		sys, err := strconv.ParseInt(stats[14], 10, 64)
+		sys, err := strconv.ParseInt(stats[12], 10, 64)
 		if err != nil {
 			return fmt.Errorf("failed to convert process system cpu: %v", err)
 		}
 		totalCPU += user + sys
-		Add(md, "linux.proc.cpu", stats[13], opentsdb.TagSet{"type": "user"}.Merge(tags), metadata.Counter, metadata.Pct, descLinuxProcCPUUser)
-		Add(md, "linux.proc.cpu", stats[14], opentsdb.TagSet{"type": "system"}.Merge(tags), metadata.Counter, metadata.Pct, descLinuxProcCPUSystem)
-		Add(md, "linux.proc.mem.fault", stats[9], opentsdb.TagSet{"type": "minflt"}.Merge(tags), metadata.Counter, metadata.Fault, descLinuxProcMemFaultMin)
-		Add(md, "linux.proc.mem.fault", stats[11], opentsdb.TagSet{"type": "majflt"}.Merge(tags), metadata.Counter, metadata.Fault, descLinuxProcMemFaultMax)
-		virtual, err := strconv.ParseInt(stats[22], 10, 64)
+		Add(md, "linux.proc.cpu", stats[11], opentsdb.TagSet{"type": "user"}.Merge(tags), metadata.Counter, metadata.Pct, descLinuxProcCPUUser)
+		Add(md, "linux.proc.cpu", stats[12], opentsdb.TagSet{"type": "system"}.Merge(tags), metadata.Counter, metadata.Pct, descLinuxProcCPUSystem)
+		Add(md, "linux.proc.mem.fault", stats[7], opentsdb.TagSet{"type": "minflt"}.Merge(tags), metadata.Counter, metadata.Fault, descLinuxProcMemFaultMin)
+		Add(md, "linux.proc.mem.fault", stats[9], opentsdb.TagSet{"type": "majflt"}.Merge(tags), metadata.Counter, metadata.Fault, descLinuxProcMemFaultMax)
+		virtual, err := strconv.ParseInt(stats[20], 10, 64)
 		if err != nil {
 			return fmt.Errorf("failed to convert process virtual memory: %v", err)
 		}
 		totalVirtualMem += virtual
-		rss, err := strconv.ParseInt(stats[23], 10, 64)
+		rss, err := strconv.ParseInt(stats[21], 10, 64)
 		if err != nil {
 			return fmt.Errorf("failed to convert process rss memory: %v", err)
 		}
@@ -152,8 +161,8 @@ func linuxProcMonitor(w *WatchedProc, md *opentsdb.MultiDataPoint) error {
 			TotalScollectorMemoryMB = uint64(rss) * uint64(osPageSize) / 1024 / 1024
 		}
 		totalRSSMem += rss
-		Add(md, "linux.proc.mem.virtual", stats[22], tags, metadata.Gauge, metadata.Bytes, descLinuxProcMemVirtual)
-		Add(md, "linux.proc.mem.rss", stats[23], tags, metadata.Gauge, metadata.Page, descLinuxProcMemRss)
+		Add(md, "linux.proc.mem.virtual", stats[20], tags, metadata.Gauge, metadata.Bytes, descLinuxProcMemVirtual)
+		Add(md, "linux.proc.mem.rss", stats[21], tags, metadata.Gauge, metadata.Page, descLinuxProcMemRss)
 		Add(md, "linux.proc.mem.rss_bytes", rss*int64(osPageSize), tags, metadata.Gauge, metadata.Bytes, descLinuxProcMemRssBytes)
 		Add(md, "linux.proc.char_io", io[0], opentsdb.TagSet{"type": "read"}.Merge(tags), metadata.Counter, metadata.Bytes, descLinuxProcCharIoRead)
 		Add(md, "linux.proc.char_io", io[1], opentsdb.TagSet{"type": "write"}.Merge(tags), metadata.Counter, metadata.Bytes, descLinuxProcCharIoWrite)
